@@ -1,0 +1,38 @@
+$kind: http-request
+method: GET
+url: '{{base_url}}/gateway/ping'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // 1. Status code 200
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      // 2. Tiempo de respuesta razonable
+      pm.test("Response time is less than 3000ms", function () {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });
+
+      // 3. Content-Type es JSON
+      pm.test("Content-Type is application/json", function () {
+          pm.response.to.have.header("Content-Type");
+          pm.expect(pm.response.headers.get("Content-Type")).to.include("application/json");
+      });
+
+      // 4. Body tiene la propiedad 'message'
+      pm.test("Response body has 'message' property", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("message");
+      });
+
+      // 5. El mensaje es el esperado desde la Lambda
+      pm.test("Message is 'Hola desde Lambda'", function () {
+          const json = pm.response.json();
+          pm.expect(json.message).to.eql("Hola desde Lambda");
+      });

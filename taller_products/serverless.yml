@@ -1,0 +1,218 @@
+service: taller-products
+frameworkVersion: "4"
+configValidationMode: warn
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    stages: [local]
+    host: http://localhost
+    edgePort: 4566
+    autostart: false
+
+stages:
+  default:
+    params:
+      jwtSecret: ${ssm:/taller/${sls:stage}/jwt-secret, 'local-dev-secret'}
+      dynamodbEndpoint: ""
+  local:
+    params:
+      jwtSecret: local-dev-secret
+      dynamodbEndpoint: http://host.docker.internal:4566
+  prod:
+    params:
+      jwtSecret: ${ssm:/taller/prod/jwt-secret}
+      dynamodbEndpoint: ""
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'local'}
+  region: us-east-1
+  environment:
+    PRODUCTS_TABLE: !Ref ProductsTable
+    DYNAMODB_ENDPOINT: ${param:dynamodbEndpoint}
+    JWT_SECRET: ${param:jwtSecret}
+    CORS_ORIGINS: ${file(./config/config-${self:provider.stage}.json):CORS_ORIGINS}
+  apiGateway:
+    restApiId: !ImportValue MainRestApiId
+    restApiRootResourceId: !ImportValue MainRestApiRootResourceId
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource:
+        - !GetAtt ProductsTable.Arn
+
+functions:
+  createProduct:
+    handler: src/handlers/createProduct.createProduct
+    name: taller-${self:provider.stage}-Products-Post
+    events:
+      - http:
+          method: post
+          path: /products/create
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+      - http:
+          method: post
+          path: /products/createProduct
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+  getProduct:
+    handler: src/handlers/getProduct.getProduct
+    name: taller-${self:provider.stage}-Products-GetProduct
+    events:
+      - http:
+          method: get
+          path: /products/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  updateProduct:
+    handler: src/handlers/updateProduct.updateProduct
+    name: taller-${self:provider.stage}-Products-UpdateProduct
+    events:
+      - http:
+          method: put
+          path: /products/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+  deleteProduct:
+    handler: src/handlers/deleteProduct.deleteProduct
+    name: taller-${self:provider.stage}-Products-DeleteProduct
+    events:
+      - http:
+          method: delete
+          path: /products/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+  listAllProducts:
+    handler: src/handlers/listAllProducts.listAllProducts
+    name: taller-${self:provider.stage}-Products-ListAll
+    events:
+      - http:
+          method: get
+          path: /products
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  listProductsBySeller:
+    handler: src/handlers/listProductsBySeller.listProductsBySeller
+    name: taller-${self:provider.stage}-Products-ListBySeller
+    events:
+      - http:
+          method: get
+          path: /products/users/{sellerId}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  updateStock:
+    handler: src/handlers/updateStock.updateStock
+    name: taller-${self:provider.stage}-Products-UpdateStock
+    events:
+      - http:
+          method: patch
+          path: /products/{id}/stock
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+
+resources:
+  Resources:
+    ProductsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-products
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: productId
+            AttributeType: S
+          - AttributeName: sellerId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: productId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: SellerIdIndex
+            KeySchema:
+              - AttributeName: sellerId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL

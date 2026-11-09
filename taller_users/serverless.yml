@@ -1,0 +1,206 @@
+service: taller-users
+frameworkVersion: "4"
+configValidationMode: warn
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    stages: [local]
+    host: http://localhost
+    edgePort: 4566
+    autostart: false
+
+stages:
+  default:
+    params:
+      jwtSecret: ${ssm:/taller/${sls:stage}/jwt-secret, 'local-dev-secret'}
+      jwtRefreshSecret: ${ssm:/taller/${sls:stage}/jwt-refresh-secret, 'local-dev-refresh-secret'}
+      dynamodbEndpoint: ""
+  local:
+    params:
+      jwtSecret: local-dev-secret
+      jwtRefreshSecret: local-dev-refresh-secret
+      dynamodbEndpoint: http://host.docker.internal:4566
+  prod:
+    params:
+      jwtSecret: ${ssm:/taller/prod/jwt-secret}
+      jwtRefreshSecret: ${ssm:/taller/prod/jwt-refresh-secret}
+      dynamodbEndpoint: ""
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'local'}
+  region: us-east-1
+  environment:
+    JWT_SECRET: ${param:jwtSecret}
+    JWT_REFRESH_SECRET: ${param:jwtRefreshSecret}
+    CORS_ORIGINS: ${file(./config/config-${self:provider.stage}.json):CORS_ORIGINS}
+    USERS_TABLE: !Ref UsersTable
+    REFRESH_TOKENS_TABLE: !Ref RefreshTokensTable
+    DYNAMODB_ENDPOINT: ${param:dynamodbEndpoint}
+  apiGateway:
+    restApiId: !ImportValue MainRestApiId
+    restApiRootResourceId: !ImportValue MainRestApiRootResourceId
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource:
+        - !GetAtt UsersTable.Arn
+        - !Join
+          - ""
+          - - !GetAtt UsersTable.Arn
+            - /index/EmailIndex
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:DeleteItem
+      Resource:
+        - !GetAtt UsersTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:Query
+        - dynamodb:DeleteItem
+      Resource:
+        - !GetAtt RefreshTokensTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "*"
+
+functions:
+  register:
+    handler: src/register.register
+    events:
+      - http:
+          method: POST
+          path: /users/register
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  login:
+    handler: src/handlers/login.login
+    events:
+      - http:
+          method: POST
+          path: /users/login
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  getUser:
+    handler: src/handlers/getUser.getUser
+    events:
+      - http:
+          method: get
+          path: /users/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+  updateUser:
+    handler: src/handlers/updateUser.updateUser
+    events:
+      - http:
+          method: put
+          path: /users/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+  deleteUser:
+    handler: src/handlers/deleteUser.deleteUser
+    events:
+      - http:
+          method: delete
+          path: /users/{id}
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+          authorizer:
+            type: CUSTOM
+            authorizerId:
+              Fn::ImportValue: MainAuthorizerId
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-users-table
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    RefreshTokensTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-refresh-tokens
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: token
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: token
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true

@@ -1,0 +1,25 @@
+{
+  "name": "taller_products",
+  "version": "1.0.0",
+  "description": "Product creation service for the Amazon Lite workshop",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy:local": "serverless deploy --stage local --aws-profile taller-local",
+    "remove:local": "serverless remove --stage local --aws-profile taller-local"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.20.5",
+    "serverless": "^4.46.0",
+    "serverless-localstack": "^1.4.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

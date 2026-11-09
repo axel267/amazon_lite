@@ -1,0 +1,147 @@
+service: taller-gateway
+frameworkVersion: "4"
+configValidationMode: warn
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    stages: [local]
+    host: http://localhost
+    edgePort: 4566
+    autostart: false
+
+stages:
+  default:
+    params:
+      jwtSecret: ${ssm:/taller/${sls:stage}/jwt-secret, 'local-dev-secret'}
+  local:
+    params:
+      jwtSecret: local-dev-secret
+  prod:
+    params:
+      jwtSecret: ${ssm:/taller/prod/jwt-secret}
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'local'}
+  region: us-east-1
+  environment:
+    STAGE: ${self:provider.stage}
+    JWT_SECRET: ${param:jwtSecret}
+    CORS_ORIGINS: ${file(./config/config-${self:provider.stage}.json):CORS_ORIGINS}
+  apiGateway:
+    usagePlan:
+      quota:
+        limit: 10000
+        period: MONTH
+      throttle:
+        rateLimit: 10
+        burstLimit: 20
+    apiKeys:
+      - name: ${self:provider.stage}-AmazonLite-DefaultKey
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "*"
+
+functions:
+  ping:
+    handler: src/handlers/handlers/ping.handler
+    name: taller-${self:provider.stage}-Gateway-Ping
+    events:
+      - http:
+          method: GET
+          path: /gateway/ping
+          cors:
+            origin: ${self:provider.environment.CORS_ORIGINS}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Date
+              - X-Amz-Security-Token
+  authorizer:
+    handler: src/handlers/handlers/authorizer.authorizer
+    name: taller-${self:provider.stage}-Gateway-Authorizer
+
+resources:
+  Resources:
+    MainAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: taller-${self:provider.stage}-jwt-authorizer
+        RestApiId: { Ref: ApiGatewayRestApi }
+        Type: TOKEN
+        IdentitySource: method.request.header.Authorization
+        AuthorizerUri:
+          Fn::Sub: >-
+            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerLambdaFunction.Arn}/invocations
+        AuthorizerResultTtlInSeconds: 300
+
+    AuthorizerInvokePermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: { Fn::GetAtt: [AuthorizerLambdaFunction, Arn] }
+        Action: lambda:InvokeFunction
+        Principal: apigateway.amazonaws.com
+        SourceArn:
+          Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/authorizers/*
+
+    GatewayResponseUnauthorized:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: ApiGatewayRestApi }
+        ResponseType: UNAUTHORIZED
+        StatusCode: "401"
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'${self:provider.environment.CORS_ORIGINS}'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type, Authorization, X-Api-Key, X-Amz-Date, X-Amz-Security-Token'"
+
+    GatewayResponseAccessDenied:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: ApiGatewayRestApi }
+        ResponseType: ACCESS_DENIED
+        StatusCode: "403"
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'${self:provider.environment.CORS_ORIGINS}'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type, Authorization, X-Api-Key, X-Amz-Date, X-Amz-Security-Token'"
+
+    GatewayResponseDefault4XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: ApiGatewayRestApi }
+        ResponseType: DEFAULT_4XX
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'${self:provider.environment.CORS_ORIGINS}'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type, Authorization, X-Api-Key, X-Amz-Date, X-Amz-Security-Token'"
+
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        RestApiId: { Ref: ApiGatewayRestApi }
+        ResponseType: DEFAULT_5XX
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'${self:provider.environment.CORS_ORIGINS}'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type, Authorization, X-Api-Key, X-Amz-Date, X-Amz-Security-Token'"
+
+  Outputs:
+    MainRestApiId:
+      Value: { Ref: ApiGatewayRestApi }
+      Export: { Name: MainRestApiId }
+    MainRestApiRootResourceId:
+      Value:
+        Fn::GetAtt: [ApiGatewayRestApi, RootResourceId]
+      Export: { Name: MainRestApiRootResourceId }
+    MainAuthorizerId:
+      Value: { Ref: MainAuthorizer }
+      Export: { Name: MainAuthorizerId }

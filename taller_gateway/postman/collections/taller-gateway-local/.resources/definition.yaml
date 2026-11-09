@@ -1,0 +1,9 @@
+$kind: collection
+name: Taller Gateway - LocalStack
+description: |-
+  Colección para testear las Lambdas del taller-gateway desplegadas en LocalStack.
+  Base URL: http://localhost:4566/restapis/8twotrczlp/local/_user_request_
+variables:
+  - key: base_url
+    value: 'http://localhost:4566/restapis/8twotrczlp/local/_user_request_'
+    description: 'URL base del API Gateway en LocalStack. Uso: {{base_url}}/gateway/ping'

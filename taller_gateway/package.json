@@ -1,0 +1,20 @@
+{
+  "name": "tallergateway",
+  "version": "1.0.0",
+  "description": "Gateway de microservicios de Amazon Lite",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy:local": "serverless deploy --stage local --aws-profile taller-local",
+    "remove:local": "serverless remove --stage local --aws-profile taller-local"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/jsonwebtoken": "^9.0.10",
+    "serverless": "^4.46.0",
+    "serverless-localstack": "^1.0.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.3"
+  }
+}

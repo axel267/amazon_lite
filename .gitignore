@@ -1,0 +1,18 @@
+# Dependencies and build output
+**/node_modules/
+**/.serverless/
+**/dist/
+
+# Local credentials and LocalStack data
+**/.env
+**/.env.*
+!.env.example
+localstack/volume/
+
+# Local editor and review artifacts
+**/.postman/
+*.log
+Thumbs.db
+_*.mp4
+_review_video.html
+_uploaded_review.pdf

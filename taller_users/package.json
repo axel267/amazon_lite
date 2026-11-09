@@ -1,0 +1,34 @@
+{
+  "name": "taller_users",
+  "version": "1.0.0",
+  "description": "Modulod e taller aws hehco para manejar las peticiones de los users",
+  "keywords": [
+    "AWS",
+    "node.js",
+    "serverless"
+  ],
+  "license": "ISC",
+  "author": "Axel Ayala",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy:local": "serverless deploy --stage local --aws-profile taller-local",
+    "remove:local": "serverless remove --stage local --aws-profile taller-local",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.20.5",
+    "serverless": "^4.46.0",
+    "serverless-localstack": "^1.4.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.3"
+  }
+}
