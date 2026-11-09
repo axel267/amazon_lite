@@ -8,6 +8,7 @@ Proyecto del taller de Amazon Lite. Aquí están el Gateway y los servicios de u
 - `taller_users`: registro, login y administración de usuarios.
 - `taller_products`: catálogo y stock de productos.
 - `taller_orders`: creación y seguimiento de órdenes.
+- `taller_frontend`: tienda web en React y TypeScript conectada a las APIs locales.
 - `localstack`: Docker Compose para levantar los servicios locales.
 
 ## Levantarlo en Windows
@@ -16,8 +17,11 @@ Se necesita Docker Desktop, Node.js y npm. Desde PowerShell:
 
 ```powershell
 cd C:\Users\TU_USUARIO\Desktop\amazon_lite\localstack
+$env:LOCALSTACK_DOCKER_NAME = "amazon-lite-localstack"
 docker compose up -d
 ```
+
+Si ya hay una instancia de LocalStack usando el puerto `4566`, reutilízala y no ejecutes otro `docker compose up`; el frontend se conecta a ese puerto.
 
 Despliega primero el Gateway, porque los otros servicios importan su API y authorizer:
 
@@ -42,6 +46,20 @@ npm run deploy:local
 Los servicios comparten el API Gateway de LocalStack en `http://localhost:4566`. Cada despliegue muestra la URL completa de la API. Para volver a desplegar un solo módulo, entra a su carpeta y corre `npm run deploy:local`.
 
 Para validar los tipos, corre `npm run typecheck` dentro de cada módulo.
+
+## Abrir la tienda web
+
+Con LocalStack y los cuatro módulos desplegados, abre otra terminal de PowerShell:
+
+```powershell
+cd C:\Users\TU_USUARIO\Desktop\amazon_lite\taller_frontend
+npm install
+npm run dev
+```
+
+Abre la dirección local que muestra Vite (normalmente `http://localhost:5173`). La tienda consulta `/products`, permite crear una cuenta e iniciar sesión, añadir productos al carrito y crear pedidos. El historial de compras aparece al iniciar sesión. Las cuentas con rol de vendedor también pueden publicar productos.
+
+La URL de la API está configurada por defecto para el API Gateway de LocalStack de este proyecto. Para usar otra URL, copia `.env.example` como `.env.local` y cambia `VITE_API_BASE_URL`.
 
 ## Frontend y CORS
 
